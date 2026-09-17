@@ -208,7 +208,7 @@ natively on Linux.
   as well as from the Configuration dialog, so the popup can be silenced
   without quitting the program.
 
-**What was built** (commit `659a3b9`)
+**What was built** (commit `b27cf35`)
 
 * A checkable **Enable popup window** item in three places: the tray icon's
   right-click menu, the right-click menu of the main window toolbar (and of
