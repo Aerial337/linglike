@@ -5,10 +5,12 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // DictConfig is one configured dictionary file.
@@ -82,18 +84,48 @@ func Default() *Config {
 	}
 }
 
+var (
+	dirOnce sync.Once
+	dirVal  string
+)
+
 // Dir returns the directory holding the configuration file.
+//
+// Portable mode: if a config.json exists next to the executable, that
+// directory is used. Otherwise %APPDATA%\Linglike (Windows) or the user
+// configuration directory is used, falling back to the executable's
+// directory when neither is available.
 func Dir() string {
-	if runtime.GOOS == "windows" {
-		if d := os.Getenv("APPDATA"); d != "" {
-			return filepath.Join(d, "Linglike")
+	dirOnce.Do(func() {
+		exeDir := ""
+		if exe, err := os.Executable(); err == nil {
+			exeDir = filepath.Dir(exe)
+			if _, err := os.Stat(filepath.Join(exeDir, "config.json")); err == nil {
+				dirVal = exeDir
+				return
+			}
 		}
-	}
-	d, err := os.UserConfigDir()
-	if err != nil {
-		d = "."
-	}
-	return filepath.Join(d, "linglike")
+		if runtime.GOOS == "windows" {
+			if d := os.Getenv("APPDATA"); d != "" {
+				dirVal = filepath.Join(d, "Linglike")
+				return
+			}
+			if d := os.Getenv("USERPROFILE"); d != "" {
+				dirVal = filepath.Join(d, "AppData", "Roaming", "Linglike")
+				return
+			}
+		}
+		if d, err := os.UserConfigDir(); err == nil && d != "" {
+			dirVal = filepath.Join(d, "linglike")
+			return
+		}
+		if exeDir != "" {
+			dirVal = exeDir
+			return
+		}
+		dirVal = "."
+	})
+	return dirVal
 }
 
 // Path returns the configuration file path.
@@ -110,8 +142,10 @@ func Load() (*Config, error) {
 		return cfg, err
 	}
 	if err := json.Unmarshal(b, cfg); err != nil {
+		log.Printf("config: cannot parse %s: %v", Path(), err)
 		return Default(), err
 	}
+	log.Printf("config: loaded %s (target %s, hotkey %s, %d dictionaries)", Path(), cfg.TargetLang, cfg.Hotkey, len(cfg.Dictionaries))
 	if cfg.TargetLang == "" {
 		cfg.TargetLang = "en"
 	}
@@ -130,8 +164,18 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Save writes the configuration.
+// Save writes the configuration. Errors are also logged.
 func (c *Config) Save() error {
+	err := c.save()
+	if err != nil {
+		log.Printf("config: save to %s failed: %v", Path(), err)
+	} else {
+		log.Printf("config: saved to %s (target %s, hotkey %s)", Path(), c.TargetLang, c.Hotkey)
+	}
+	return err
+}
+
+func (c *Config) save() error {
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return err
 	}
@@ -140,10 +184,14 @@ func (c *Config) Save() error {
 		return err
 	}
 	tmp := Path() + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
+	if err := os.WriteFile(tmp, b, 0o644); err == nil {
+		if err := os.Rename(tmp, Path()); err == nil {
+			return nil
+		}
+		os.Remove(tmp)
 	}
-	return os.Rename(tmp, Path())
+	// Fall back to writing the file directly.
+	return os.WriteFile(Path(), b, 0o644)
 }
 
 // AddHistory records a search term (most recent first, deduplicated).

@@ -19,11 +19,13 @@ type popupWindow struct {
 	mw     *walk.MainWindow
 	title  *walk.Label
 	pinBtn *walk.PushButton
+	lang   *walk.ComboBox
 	web    *walk.WebView
 
-	text    string
-	pinned  bool
-	showSeq int
+	text     string
+	pinned   bool
+	showSeq  int
+	suppress bool
 }
 
 func newPopupWindow(a *App) (*popupWindow, error) {
@@ -39,6 +41,14 @@ func newPopupWindow(a *App) (*popupWindow, error) {
 				Children: []Widget{
 					Label{AssignTo: &p.title, Text: "", Font: Font{Family: "Segoe UI", PointSize: 9, Bold: true}},
 					HSpacer{},
+					ComboBox{
+						AssignTo:              &p.lang,
+						Model:                 a.langNames,
+						CurrentIndex:          a.targetIndex(),
+						MaxSize:               Size{Width: 120},
+						ToolTipText:           "Translate to",
+						OnCurrentIndexChanged: p.langChanged,
+					},
 					PushButton{AssignTo: &p.pinBtn, Text: "Pin", MaxSize: Size{Width: 40}, OnClicked: p.togglePin},
 					PushButton{Text: "Open", MaxSize: Size{Width: 46}, OnClicked: p.openInMain},
 					PushButton{Text: "X", MaxSize: Size{Width: 26}, OnClicked: p.hide},
@@ -51,6 +61,7 @@ func newPopupWindow(a *App) (*popupWindow, error) {
 		return nil, err
 	}
 	p.mw.StatusBar().SetVisible(false)
+	p.lang.SetCurrentIndex(a.targetIndex())
 	// Turn the frame into a borderless tool window that stays on top and
 	// does not appear in the taskbar.
 	hwnd := p.mw.Handle()
@@ -73,6 +84,32 @@ func newPopupWindow(a *App) (*popupWindow, error) {
 		p.hide()
 	})
 	return p, nil
+}
+
+// langChanged handles a new target language picked in the popup header.
+func (p *popupWindow) langChanged() {
+	if p.suppress {
+		return
+	}
+	i := p.lang.CurrentIndex()
+	if i < 0 || i >= len(p.app.langCodes) {
+		return
+	}
+	p.pinned = true // keep the popup open while the user changes languages
+	p.pinBtn.SetText("Unpin")
+	if p.app.setTargetLang(p.app.langCodes[i]) && p.text != "" {
+		p.show(p.text)
+	}
+}
+
+// syncLang shows the configured target language in the header.
+func (p *popupWindow) syncLang() {
+	if p.lang == nil {
+		return
+	}
+	p.suppress = true
+	p.lang.SetCurrentIndex(p.app.targetIndex())
+	p.suppress = false
 }
 
 func (p *popupWindow) togglePin() {

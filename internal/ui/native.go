@@ -24,6 +24,7 @@ var (
 	procMonitorFromPoint              = user32.NewProc("MonitorFromPoint")
 	procWindowFromPoint               = user32.NewProc("WindowFromPoint")
 	procGetAncestor                   = user32.NewProc("GetAncestor")
+	procGetClassNameW                 = user32.NewProc("GetClassNameW")
 	kernel32                          = syscall.NewLazyDLL("kernel32.dll")
 	procCreateMutexW                  = kernel32.NewProc("CreateMutexW")
 )
@@ -181,6 +182,18 @@ func topLevelWindowAt(pt win.POINT) win.HWND {
 	return win.HWND(r)
 }
 
+// windowClassAt returns the class name of the window under a screen point.
+func windowClassAt(pt win.POINT) string {
+	packed := uintptr(uint32(pt.X)) | uintptr(uint32(pt.Y))<<32
+	h, _, _ := procWindowFromPoint.Call(packed)
+	if h == 0 {
+		return ""
+	}
+	var buf [64]uint16
+	n, _, _ := procGetClassNameW.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf[:n])
+}
+
 // sendCopy simulates Ctrl+C in the foreground application. Modifier keys
 // the user may still be holding (from the hotkey) are released first so
 // the application sees a clean Ctrl+C.
@@ -283,6 +296,11 @@ func (h *mouseHook) notifyOutside(pt win.POINT) {
 		return
 	}
 	if topLevelWindowAt(pt) == pw {
+		return
+	}
+	// The drop-down list of a combo box is a separate top-level window;
+	// choosing a language in the popup must not close it.
+	if windowClassAt(pt) == "ComboLBox" {
 		return
 	}
 	win.PostMessage(h.target, wmAppOutside, 0, 0)

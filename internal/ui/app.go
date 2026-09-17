@@ -30,6 +30,9 @@ type App struct {
 	msg   *msgWindow
 	hook  *mouseHook
 
+	langNames []string // target language display names
+	langCodes []string // parallel language codes
+
 	hotkeyRegistered bool
 	clipboardHooked  bool
 	ignoreClipUntil  time.Time
@@ -38,6 +41,9 @@ type App struct {
 	querySeq         int
 }
 
+// Alert shows a warning message box.
+func Alert(msg string) { walk.MsgBox(nil, "Linglike", msg, walk.MsgBoxIconWarning) }
+
 // Run starts the application and blocks until it exits.
 func Run(cfg *app.Config, svc *app.Service) int {
 	if !singleInstance("Local\\LinglikeSingleInstance") {
@@ -45,6 +51,7 @@ func Run(cfg *app.Config, svc *app.Service) int {
 		return 0
 	}
 	a := &App{cfg: cfg, svc: svc}
+	a.langNames, a.langCodes = langModel(false)
 	var err error
 	if a.host, err = newHTMLHost(); err != nil {
 		walk.MsgBox(nil, "Linglike", "Cannot create temporary files: "+err.Error(), walk.MsgBoxIconError)
@@ -330,6 +337,25 @@ func cleanCapturedText(s string) string {
 		s = strings.TrimLeft(s, "\"'([{«")
 	}
 	return s
+}
+
+// ---- target language -----------------------------------------------------
+
+// targetIndex returns the index of the configured target language in the
+// language lists.
+func (a *App) targetIndex() int { return indexOf(a.langCodes, a.cfg.TargetLang) }
+
+// setTargetLang changes the translation target language, saves it and
+// updates the language selectors of the main window and the popup.
+func (a *App) setTargetLang(code string) bool {
+	if code == "" || code == a.cfg.TargetLang {
+		return false
+	}
+	a.cfg.TargetLang = code
+	a.cfg.Save()
+	a.main.syncLang()
+	a.popup.syncLang()
+	return true
 }
 
 // ---- queries --------------------------------------------------------------

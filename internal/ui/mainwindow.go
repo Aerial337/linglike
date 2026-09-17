@@ -51,6 +51,7 @@ type mainWindow struct {
 	index  *walk.ListBox
 	web    *walk.WebView
 	status *walk.StatusBarItem
+	lang   *walk.ComboBox
 
 	model    *treeModel
 	results  *treeItem
@@ -121,7 +122,16 @@ func newMainWindow(a *App) (*mainWindow, error) {
 						OnTextChanged: w.searchTextChanged,
 					},
 					PushButton{Text: "Search", OnClicked: func() { w.lookup(w.search.Text()) }},
-					PushButton{Text: "Translate", OnClicked: func() { w.showTranslateDialog(w.search.Text()) }},
+					Label{Text: "Translate to:"},
+					ComboBox{
+						AssignTo:              &w.lang,
+						Model:                 a.langNames,
+						CurrentIndex:          a.targetIndex(),
+						MaxSize:               Size{Width: 150},
+						ToolTipText:           "Target language for Google Translate",
+						OnCurrentIndexChanged: w.langChanged,
+					},
+					PushButton{Text: "Text...", ToolTipText: "Text Translation window", OnClicked: func() { w.showTranslateDialog(w.search.Text()) }},
 				},
 			},
 			HSplitter{
@@ -176,8 +186,33 @@ func newMainWindow(a *App) (*mainWindow, error) {
 	})
 	w.tree.SetExpanded(w.results, true)
 	w.tree.SetExpanded(w.options, true)
+	w.lang.SetCurrentIndex(a.targetIndex())
 	w.showWelcome()
 	return w, nil
+}
+
+// langChanged handles a new target language picked in the toolbar.
+func (w *mainWindow) langChanged() {
+	if w.suppress {
+		return
+	}
+	i := w.lang.CurrentIndex()
+	if i < 0 || i >= len(w.app.langCodes) {
+		return
+	}
+	if w.app.setTargetLang(w.app.langCodes[i]) && w.current != "" {
+		w.doLookup(w.current)
+	}
+}
+
+// syncLang shows the configured target language in the toolbar.
+func (w *mainWindow) syncLang() {
+	if w.lang == nil {
+		return
+	}
+	w.suppress = true
+	w.lang.SetCurrentIndex(w.app.targetIndex())
+	w.suppress = false
 }
 
 func (w *mainWindow) dictSummary() string {

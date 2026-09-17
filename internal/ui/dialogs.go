@@ -184,7 +184,9 @@ func (w *mainWindow) showDictionariesDialog() {
 	for _, r := range model.rows {
 		a.cfg.Dictionaries = append(a.cfg.Dictionaries, r.cfg)
 	}
-	a.cfg.Save()
+	if err := a.cfg.Save(); err != nil {
+		walk.MsgBox(w.mw, "Linglike", "Cannot save settings to "+app.Path()+":\n"+err.Error(), walk.MsgBoxIconError)
+	}
 	w.setStatus("Loading dictionaries…")
 	a.svc.Reload()
 	w.showLoadErrors()
@@ -333,6 +335,29 @@ func (w *mainWindow) showSettingsDialog() {
 		walk.MsgBox(w.mw, "Linglike", err.Error(), walk.MsgBoxIconError)
 		return
 	}
+	// Set the initial state explicitly as well, in case the declarative
+	// property initialisation did not apply.
+	hotkeyOn.SetChecked(cfg.HotkeyEnabled)
+	ctrl.SetChecked(cfg.Hotkey.Ctrl)
+	alt.SetChecked(cfg.Hotkey.Alt)
+	shift.SetChecked(cfg.Hotkey.Shift)
+	winKey.SetChecked(cfg.Hotkey.Win)
+	keyBox.SetCurrentIndex(indexOf(keys, cfg.Hotkey.Key))
+	ctrlRight.SetChecked(cfg.CtrlRightClick)
+	clipWatch.SetChecked(cfg.ClipboardWatch)
+	restoreClip.SetChecked(cfg.RestoreClipboard)
+	popW.SetValue(float64(cfg.PopupWidth))
+	popH.SetValue(float64(cfg.PopupHeight))
+	autoClose.SetChecked(cfg.PopupAutoClose)
+	closeSecs.SetValue(float64(cfg.PopupCloseSeconds))
+	trOn.SetChecked(cfg.TranslateEnabled)
+	trPopup.SetChecked(cfg.TranslateInPopup)
+	sourceBox.SetCurrentIndex(indexOf(sourceCodes, cfg.SourceLang))
+	targetBox.SetCurrentIndex(indexOf(targetCodes, cfg.TargetLang))
+	toTray.SetChecked(cfg.MinimizeToTray)
+	startHidden.SetChecked(cfg.StartHidden)
+	maxSugg.SetValue(float64(cfg.MaxSuggestions))
+
 	if dlg.Run() != walk.DlgCmdOK {
 		return
 	}
@@ -353,11 +378,14 @@ func (w *mainWindow) showSettingsDialog() {
 	cfg.StartHidden = startHidden.Checked()
 	cfg.MaxSuggestions = int(maxSugg.Value())
 	if err := cfg.Save(); err != nil {
-		walk.MsgBox(w.mw, "Linglike", "Cannot save settings: "+err.Error(), walk.MsgBoxIconError)
+		walk.MsgBox(w.mw, "Linglike", "Cannot save settings to "+app.Path()+":\n"+err.Error(), walk.MsgBoxIconError)
+		return
 	}
 	a.applyCaptureSettings()
 	a.popup.mw.SetSize(walk.Size{Width: cfg.PopupWidth, Height: cfg.PopupHeight})
-	w.setStatus("Settings saved. Hotkey: " + cfg.Hotkey.String())
+	w.syncLang()
+	a.popup.syncLang()
+	w.setStatus("Settings saved to " + app.Path() + "  ·  hotkey " + cfg.Hotkey.String() + "  ·  translate to " + translate.LanguageName(cfg.TargetLang))
 }
 
 // ---- Text translation dialog ---------------------------------------------

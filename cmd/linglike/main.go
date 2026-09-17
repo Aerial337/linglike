@@ -26,6 +26,7 @@ func main() {
 	cfg, err := app.Load()
 	if err != nil {
 		log.Println("config:", err)
+		ui.Alert("Linglike could not read its settings file and will use defaults.\n\n" + app.Path() + "\n" + err.Error())
 	}
 	if len(os.Args) > 1 {
 		// Files passed on the command line (e.g. drag & drop onto the exe)
