@@ -170,6 +170,11 @@ internal/ui         main window, popup, dialogs, tray, hotkeys, hooks
 tools/mkicon        generates the application icon
 ```
 
+## Project history
+
+[REQUESTS.md](REQUESTS.md) records the original requests this project was
+built from, in order, with what each one asked for and what was implemented.
+
 ## License
 
 MIT – see [LICENSE](LICENSE). The LD2 layout follows the public reverse
