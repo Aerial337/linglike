@@ -203,7 +203,11 @@ func (a *App) applyCaptureSettings() {
 		if hk.Win {
 			mods |= modWin
 		}
-		if vk, ok := keyCode(hk.Key); ok {
+		if vk, ok := keyCode(hk.Key); ok && mods == 0 && len(hk.Key) == 1 {
+			// A bare letter or digit would be swallowed system-wide.
+			a.main.setStatus("Hotkey " + hk.Key + " needs a modifier (Ctrl, Alt, Shift or Win); not registered")
+			_ = vk
+		} else if ok {
 			if err := registerHotKey(a.msg.hwnd, hotkeyID, mods, vk); err != nil {
 				a.main.setStatus("Hotkey " + hk.String() + " is in use by another program")
 			} else {

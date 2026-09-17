@@ -161,6 +161,9 @@ func Load() (*Config, error) {
 	if cfg.MaxSuggestions <= 0 {
 		cfg.MaxSuggestions = 30
 	}
+	if cfg.Hotkey.Key == "" {
+		cfg.Hotkey = Default().Hotkey
+	}
 	return cfg, nil
 }
 

@@ -201,6 +201,7 @@ func promptText(owner walk.Form, title, label, initial string) (string, bool) {
 	var dlg *walk.Dialog
 	var le *walk.LineEdit
 	var ok, cancel *walk.PushButton
+	var result string
 	err := Dialog{
 		AssignTo:      &dlg,
 		Title:         title,
@@ -213,7 +214,10 @@ func promptText(owner walk.Form, title, label, initial string) (string, bool) {
 			LineEdit{AssignTo: &le, Text: initial},
 			Composite{Layout: HBox{MarginsZero: true}, Children: []Widget{
 				HSpacer{},
-				PushButton{AssignTo: &ok, Text: "OK", OnClicked: func() { dlg.Accept() }},
+				PushButton{AssignTo: &ok, Text: "OK", OnClicked: func() {
+					result = strings.TrimSpace(le.Text()) // read before the dialog is destroyed
+					dlg.Accept()
+				}},
 				PushButton{AssignTo: &cancel, Text: "Cancel", OnClicked: func() { dlg.Cancel() }},
 			}},
 		},
@@ -224,7 +228,7 @@ func promptText(owner walk.Form, title, label, initial string) (string, bool) {
 	if dlg.Run() != walk.DlgCmdOK {
 		return "", false
 	}
-	return strings.TrimSpace(le.Text()), true
+	return result, true
 }
 
 // ---- Settings dialog ------------------------------------------------------
@@ -264,6 +268,30 @@ func (w *mainWindow) showSettingsDialog() {
 	keys := KeyNames()
 	targetNames, targetCodes := langModel(false)
 	sourceNames, sourceCodes := langModel(true)
+
+	// The controls are destroyed when the dialog closes, so their values
+	// must be read while it is still open: in the OK handler.
+	var pending app.Config
+	accept := func() {
+		pending = *cfg
+		pending.HotkeyEnabled = hotkeyOn.Checked()
+		pending.Hotkey = app.Hotkey{Ctrl: ctrl.Checked(), Alt: alt.Checked(), Shift: shift.Checked(), Win: winKey.Checked(), Key: keys[max(0, keyBox.CurrentIndex())]}
+		pending.CtrlRightClick = ctrlRight.Checked()
+		pending.ClipboardWatch = clipWatch.Checked()
+		pending.RestoreClipboard = restoreClip.Checked()
+		pending.PopupWidth = int(popW.Value())
+		pending.PopupHeight = int(popH.Value())
+		pending.PopupAutoClose = autoClose.Checked()
+		pending.PopupCloseSeconds = int(closeSecs.Value())
+		pending.TranslateEnabled = trOn.Checked()
+		pending.TranslateInPopup = trPopup.Checked()
+		pending.SourceLang = sourceCodes[max(0, sourceBox.CurrentIndex())]
+		pending.TargetLang = targetCodes[max(0, targetBox.CurrentIndex())]
+		pending.MinimizeToTray = toTray.Checked()
+		pending.StartHidden = startHidden.Checked()
+		pending.MaxSuggestions = int(maxSugg.Value())
+		dlg.Accept()
+	}
 
 	err := Dialog{
 		AssignTo:      &dlg,
@@ -321,12 +349,13 @@ func (w *mainWindow) showSettingsDialog() {
 					CheckBox{AssignTo: &startHidden, Text: "Start hidden in the tray", Checked: cfg.StartHidden, ColumnSpan: 4},
 					Label{Text: "Index suggestions:"},
 					NumberEdit{AssignTo: &maxSugg, Value: float64(cfg.MaxSuggestions), MinValue: 5, MaxValue: 500, Decimals: 0},
-					Label{Text: "Settings file: " + app.Path(), ColumnSpan: 2},
+					HSpacer{ColumnSpan: 2},
+					Label{Text: "Settings file: " + app.Path(), ColumnSpan: 4, ToolTipText: app.Path()},
 				},
 			},
 			Composite{Layout: HBox{MarginsZero: true}, Children: []Widget{
 				HSpacer{},
-				PushButton{AssignTo: &okBtn, Text: "OK", OnClicked: func() { dlg.Accept() }},
+				PushButton{AssignTo: &okBtn, Text: "OK", OnClicked: accept},
 				PushButton{AssignTo: &cancelBtn, Text: "Cancel", OnClicked: func() { dlg.Cancel() }},
 			}},
 		},
@@ -361,22 +390,7 @@ func (w *mainWindow) showSettingsDialog() {
 	if dlg.Run() != walk.DlgCmdOK {
 		return
 	}
-	cfg.HotkeyEnabled = hotkeyOn.Checked()
-	cfg.Hotkey = app.Hotkey{Ctrl: ctrl.Checked(), Alt: alt.Checked(), Shift: shift.Checked(), Win: winKey.Checked(), Key: keys[max(0, keyBox.CurrentIndex())]}
-	cfg.CtrlRightClick = ctrlRight.Checked()
-	cfg.ClipboardWatch = clipWatch.Checked()
-	cfg.RestoreClipboard = restoreClip.Checked()
-	cfg.PopupWidth = int(popW.Value())
-	cfg.PopupHeight = int(popH.Value())
-	cfg.PopupAutoClose = autoClose.Checked()
-	cfg.PopupCloseSeconds = int(closeSecs.Value())
-	cfg.TranslateEnabled = trOn.Checked()
-	cfg.TranslateInPopup = trPopup.Checked()
-	cfg.SourceLang = sourceCodes[max(0, sourceBox.CurrentIndex())]
-	cfg.TargetLang = targetCodes[max(0, targetBox.CurrentIndex())]
-	cfg.MinimizeToTray = toTray.Checked()
-	cfg.StartHidden = startHidden.Checked()
-	cfg.MaxSuggestions = int(maxSugg.Value())
+	*cfg = pending
 	if err := cfg.Save(); err != nil {
 		walk.MsgBox(w.mw, "Linglike", "Cannot save settings to "+app.Path()+":\n"+err.Error(), walk.MsgBoxIconError)
 		return
@@ -385,6 +399,9 @@ func (w *mainWindow) showSettingsDialog() {
 	a.popup.mw.SetSize(walk.Size{Width: cfg.PopupWidth, Height: cfg.PopupHeight})
 	w.syncLang()
 	a.popup.syncLang()
+	if w.current == "" {
+		w.showWelcome() // refresh the hotkey shown on the welcome page
+	}
 	w.setStatus("Settings saved to " + app.Path() + "  ·  hotkey " + cfg.Hotkey.String() + "  ·  translate to " + translate.LanguageName(cfg.TargetLang))
 }
 
