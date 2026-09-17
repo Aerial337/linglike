@@ -11,6 +11,7 @@ import (
 
 	"github.com/aerial337/linglike/internal/app"
 	"github.com/aerial337/linglike/internal/dict"
+	"github.com/aerial337/linglike/internal/render"
 	"github.com/aerial337/linglike/internal/translate"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
@@ -541,6 +542,17 @@ func (w *mainWindow) showSettingsDialog() {
 
 // ---- Text translation dialog ---------------------------------------------
 
+// setEditDirection switches a text box between left-to-right and
+// right-to-left reading order and alignment.
+func setEditDirection(te *walk.TextEdit, rtl bool) {
+	te.SetRightToLeftReading(rtl)
+	if rtl {
+		te.SetTextAlignment(walk.AlignFar)
+	} else {
+		te.SetTextAlignment(walk.AlignNear)
+	}
+}
+
 func (w *mainWindow) showTranslateDialog(initial string) {
 	a := w.app
 	var dlg *walk.Dialog
@@ -567,6 +579,7 @@ func (w *mainWindow) showTranslateDialog(initial string) {
 		from := sourceCodes[max(0, sourceBox.CurrentIndex())]
 		to := targetCodes[max(0, targetBox.CurrentIndex())]
 		useLLM := engineBox.CurrentIndex() == 1
+		setEditDirection(src, render.IsRTL(text))
 		status.SetText("Translating…")
 		go func() {
 			timeout := 30 * time.Second
@@ -594,6 +607,7 @@ func (w *mainWindow) showTranslateDialog(initial string) {
 					status.SetText("Error: " + err.Error())
 					return
 				}
+				setEditDirection(dst, render.IsRTL(res.Text))
 				dst.SetText(strings.ReplaceAll(res.Text, "\n", "\r\n"))
 				st := "Translated"
 				if res.SourceLang != "" {
@@ -631,6 +645,8 @@ func (w *mainWindow) showTranslateDialog(initial string) {
 					}
 					sourceBox.SetCurrentIndex(indexOf(sourceCodes, t))
 					a, b := src.Text(), dst.Text()
+					setEditDirection(src, render.IsRTL(b))
+					setEditDirection(dst, render.IsRTL(a))
 					src.SetText(b)
 					dst.SetText(a)
 				}},
@@ -657,6 +673,7 @@ func (w *mainWindow) showTranslateDialog(initial string) {
 		walk.MsgBox(w.mw, "Linglike", err.Error(), walk.MsgBoxIconError)
 		return
 	}
+	setEditDirection(src, render.IsRTL(initial))
 	if strings.TrimSpace(initial) != "" {
 		doTranslate()
 	}

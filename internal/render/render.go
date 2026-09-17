@@ -68,6 +68,11 @@ a:hover { text-decoration: underline; }
 .sd-t { color: #7a3b00; }
 .sd-m { white-space: normal; }
 .tr-text { font-size: 14px; margin: 4px 0 6px 0; }
+.rtl { direction: rtl; text-align: right; unicode-bidi: embed; font-family: "Segoe UI", Tahoma, "Noto Naskh Arabic", Arial, sans-serif; }
+.rtl.tr-text { font-size: 15px; line-height: 1.7; }
+.rtl .tr-alt .pos { margin-right: 0; margin-left: 6px; }
+.rtl ol, .rtl ul { padding-right: 22px; padding-left: 0; }
+.rtl .ld2-defs { margin: 2px 22px 2px 0; }
 .tr-meta { color: #777; font-size: 11px; }
 .tr-alt { margin: 2px 0; }
 .tr-alt .pos { color: #b32d00; font-style: italic; margin-right: 6px; }
@@ -98,7 +103,7 @@ func HTML(p *Page) string {
 	}
 	sb.WriteString(">\n")
 	if len(p.Sections) == 0 {
-		sb.WriteString(`<div class="nores">No results for <b>` + html.EscapeString(p.Query) + `</b>.</div>`)
+		sb.WriteString(`<div class="nores">No results for <b` + dirAttr(p.Query) + `>` + html.EscapeString(p.Query) + `</b>.</div>`)
 	}
 	for _, s := range p.Sections {
 		flag := "flag"
@@ -124,13 +129,22 @@ func SectionID(i int) string { return fmt.Sprintf("sec%d", i) }
 func DictSection(i int, r dict.Result) Section {
 	var sb strings.Builder
 	for _, e := range r.Entries {
-		sb.WriteString(`<div class="entry"><div class="hw">`)
+		sb.WriteString(`<div class="entry"><div class="hw"` + dirAttr(e.Word) + `>`)
 		sb.WriteString(html.EscapeString(e.Word))
 		sb.WriteString("</div>")
 		if e.HTML {
-			sb.WriteString(e.Body)
+			if IsRTLHTML(e.Body) {
+				sb.WriteString(`<div class="rtl" dir="rtl">` + e.Body + `</div>`)
+			} else {
+				sb.WriteString(e.Body)
+			}
 		} else {
-			sb.WriteString(`<div class="sd-m">` + strings.ReplaceAll(html.EscapeString(e.Body), "\n", "<br/>") + "</div>")
+			body := strings.ReplaceAll(html.EscapeString(e.Body), "\n", "<br/>")
+			if IsRTL(e.Body) {
+				sb.WriteString(`<div class="sd-m rtl" dir="rtl">` + body + "</div>")
+			} else {
+				sb.WriteString(`<div class="sd-m">` + body + "</div>")
+			}
 		}
 		sb.WriteString("</div>")
 	}
@@ -144,7 +158,7 @@ func TranslateSection(i int, target string, res *translate.Result, err error) Se
 	if err != nil {
 		sb.WriteString(`<div class="err">` + html.EscapeString(err.Error()) + `</div>`)
 	} else if res != nil {
-		sb.WriteString(`<div class="tr-text">` + strings.ReplaceAll(html.EscapeString(res.Text), "\n", "<br/>") + `</div>`)
+		sb.WriteString(trTextDiv(res.Text))
 		meta := ""
 		if res.SourceLang != "" {
 			meta = translate.LanguageName(res.SourceLang) + " → " + translate.LanguageName(target)
@@ -156,7 +170,12 @@ func TranslateSection(i int, target string, res *translate.Result, err error) Se
 			sb.WriteString(`<div class="tr-meta">` + html.EscapeString(meta) + `</div>`)
 		}
 		for _, a := range res.Alternatives {
-			sb.WriteString(`<div class="tr-alt"><span class="pos">` + html.EscapeString(a.PartOfSpeech) + `</span>`)
+			altText := strings.Join(a.Terms, " ")
+			if IsRTL(altText) {
+				sb.WriteString(`<div class="tr-alt rtl" dir="rtl"><span class="pos">` + html.EscapeString(a.PartOfSpeech) + `</span>`)
+			} else {
+				sb.WriteString(`<div class="tr-alt"><span class="pos">` + html.EscapeString(a.PartOfSpeech) + `</span>`)
+			}
 			for k, t := range a.Terms {
 				if k > 0 {
 					sb.WriteString(", ")
@@ -171,13 +190,22 @@ func TranslateSection(i int, target string, res *translate.Result, err error) Se
 	return Section{ID: SectionID(i), Title: title, Kind: "translate", Body: sb.String()}
 }
 
+// trTextDiv renders translated text with the right writing direction.
+func trTextDiv(text string) string {
+	body := strings.ReplaceAll(html.EscapeString(text), "\n", "<br/>")
+	if IsRTL(text) {
+		return `<div class="tr-text rtl" dir="rtl">` + body + `</div>`
+	}
+	return `<div class="tr-text">` + body + `</div>`
+}
+
 // LLMSection renders a local LLM translation result (or its error).
 func LLMSection(i int, title, target string, res *translate.Result, err error) Section {
 	var sb strings.Builder
 	if err != nil {
 		sb.WriteString(`<div class="err">` + html.EscapeString(err.Error()) + `</div>`)
 	} else if res != nil {
-		sb.WriteString(`<div class="tr-text">` + strings.ReplaceAll(html.EscapeString(res.Text), "\n", "<br/>") + `</div>`)
+		sb.WriteString(trTextDiv(res.Text))
 		sb.WriteString(`<div class="tr-meta">` + html.EscapeString("→ "+translate.LanguageName(target)) + `</div>`)
 	} else {
 		sb.WriteString(`<div class="info">Asking the model…</div>`)
