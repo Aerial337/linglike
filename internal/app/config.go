@@ -29,15 +29,32 @@ type Hotkey struct {
 	Key   string `json:"key"` // single character or key name such as "F12"
 }
 
+// LLMConfig configures translation through a local (or remote)
+// OpenAI-compatible chat completions server.
+type LLMConfig struct {
+	Enabled bool   `json:"enabled"`
+	URL     string `json:"url"`
+	APIKey  string `json:"api_key"`
+	Model   string `json:"model"`
+	// Prompt template with {text}, {target} and {source} placeholders.
+	Prompt string `json:"prompt"`
+	// TargetLang is a language name for the prompt; empty means use the
+	// global target language.
+	TargetLang string `json:"target_lang"`
+	InPopup    bool   `json:"in_popup"`
+	TimeoutSec int    `json:"timeout_sec"`
+}
+
 // Config is the persisted application configuration.
 type Config struct {
 	Dictionaries []DictConfig `json:"dictionaries"`
 
 	// Translation
-	TranslateEnabled bool   `json:"translate_enabled"`
-	TargetLang       string `json:"target_lang"`
-	SourceLang       string `json:"source_lang"` // "auto" or a code
-	TranslateInPopup bool   `json:"translate_in_popup"`
+	TranslateEnabled bool      `json:"translate_enabled"`
+	TargetLang       string    `json:"target_lang"`
+	SourceLang       string    `json:"source_lang"` // "auto" or a code
+	TranslateInPopup bool      `json:"translate_in_popup"`
+	LLM              LLMConfig `json:"llm"`
 
 	// Capture of selected text
 	Hotkey            Hotkey `json:"hotkey"`
@@ -72,10 +89,16 @@ type Config struct {
 // Default returns the default configuration.
 func Default() *Config {
 	return &Config{
-		TranslateEnabled:   true,
-		TargetLang:         "en",
-		SourceLang:         "auto",
-		TranslateInPopup:   true,
+		TranslateEnabled: true,
+		TargetLang:       "en",
+		SourceLang:       "auto",
+		TranslateInPopup: true,
+		LLM: LLMConfig{
+			URL:        "http://localhost:11434",
+			Model:      "llama3.1",
+			InPopup:    true,
+			TimeoutSec: 90,
+		},
 		Hotkey:             Hotkey{Ctrl: true, Alt: true, Key: "D"},
 		HotkeyEnabled:      true,
 		CtrlRightClick:     true,
@@ -183,6 +206,12 @@ func Load() (*Config, error) {
 	if cfg.MouseLeaveDistance <= 0 {
 		cfg.MouseLeaveDistance = 60
 	}
+	if cfg.LLM.TimeoutSec <= 0 {
+		cfg.LLM.TimeoutSec = 90
+	}
+	if strings.TrimSpace(cfg.LLM.URL) == "" {
+		cfg.LLM.URL = Default().LLM.URL
+	}
 	return cfg, nil
 }
 
@@ -214,6 +243,14 @@ func (c *Config) save() error {
 	}
 	// Fall back to writing the file directly.
 	return os.WriteFile(Path(), b, 0o644)
+}
+
+// LLMTarget returns the language name the LLM should translate into.
+func (c *Config) LLMTarget() string {
+	if t := strings.TrimSpace(c.LLM.TargetLang); t != "" {
+		return t
+	}
+	return c.TargetLang
 }
 
 // AddHistory records a search term (most recent first, deduplicated).

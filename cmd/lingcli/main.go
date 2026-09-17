@@ -5,9 +5,11 @@
 //	lingcli dump  <file> [n] [skip] print n entries (raw markup)
 //	lingcli look  <file> <word>     look a word up (rendered)
 //	lingcli tr    <text> [target]   translate with Google Translate
+//	lingcli llm   <text> [target]   translate with a local LLM (env LINGLIKE_LLM_URL, _MODEL, _KEY)
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -25,6 +27,20 @@ func main() {
 	}
 	cmd := os.Args[1]
 	switch cmd {
+	case "llm":
+		// lingcli llm <text> [target]  with LINGLIKE_LLM_URL / _MODEL / _KEY / _PROMPT
+		target := "en"
+		if len(os.Args) > 3 {
+			target = os.Args[3]
+		}
+		l := &translate.LLM{URL: os.Getenv("LINGLIKE_LLM_URL"), Model: os.Getenv("LINGLIKE_LLM_MODEL"), APIKey: os.Getenv("LINGLIKE_LLM_KEY"), Prompt: os.Getenv("LINGLIKE_LLM_PROMPT")}
+		res, err := l.Translate(context.Background(), os.Args[2], "auto", target)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		fmt.Println(res.Text)
+		return
 	case "tr":
 		target := "en"
 		if len(os.Args) > 3 {

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aerial337/linglike/internal/dict"
 	_ "github.com/aerial337/linglike/internal/dict/all"
@@ -96,9 +97,26 @@ func (s *Service) Suggest(prefix string, limit int) []string {
 	return s.manager.Suggest(prefix, limit)
 }
 
-// Translate runs machine translation with the configured languages.
+// Translate runs Google translation with the configured languages.
 func (s *Service) Translate(ctx context.Context, text string) (*translate.Result, error) {
 	return s.tr.Translate(ctx, text, s.cfg.SourceLang, s.cfg.TargetLang)
+}
+
+// LLMClient builds the LLM translator from the configuration.
+func (s *Service) LLMClient() *translate.LLM {
+	c := s.cfg.LLM
+	return &translate.LLM{
+		URL:     c.URL,
+		APIKey:  c.APIKey,
+		Model:   c.Model,
+		Prompt:  c.Prompt,
+		Timeout: time.Duration(c.TimeoutSec) * time.Second,
+	}
+}
+
+// TranslateLLM runs translation through the configured LLM server.
+func (s *Service) TranslateLLM(ctx context.Context, text string) (*translate.Result, error) {
+	return s.LLMClient().Translate(ctx, text, s.cfg.SourceLang, s.cfg.LLMTarget())
 }
 
 // Query is the result of a full lookup: dictionary hits plus (optionally)
@@ -110,6 +128,10 @@ type Query struct {
 	Translation *translate.Result
 	TrErr       error
 	TrPending   bool
+	// Local LLM translation
+	LLMTranslation *translate.Result
+	LLMErr         error
+	LLMPending     bool
 }
 
 // IsSentence reports whether text looks like running text rather than a
@@ -124,17 +146,27 @@ func (s *Service) Page(q *Query, compact bool) *render.Page {
 	p := &render.Page{Query: q.Text, Compact: compact}
 	i := 0
 	addTr := func() {
-		if !s.cfg.TranslateEnabled {
-			return
+		if s.cfg.TranslateEnabled {
+			if q.TrPending {
+				p.Sections = append(p.Sections, render.TranslateSection(i, s.cfg.TargetLang, nil, nil))
+				i++
+			} else if q.Translation != nil || q.TrErr != nil {
+				p.Sections = append(p.Sections, render.TranslateSection(i, s.cfg.TargetLang, q.Translation, q.TrErr))
+				i++
+			}
 		}
-		if q.TrPending {
-			p.Sections = append(p.Sections, render.TranslateSection(i, s.cfg.TargetLang, nil, nil))
-			i++
-			return
-		}
-		if q.Translation != nil || q.TrErr != nil {
-			p.Sections = append(p.Sections, render.TranslateSection(i, s.cfg.TargetLang, q.Translation, q.TrErr))
-			i++
+		if s.cfg.LLM.Enabled {
+			title := "Local LLM"
+			if m := strings.TrimSpace(s.cfg.LLM.Model); m != "" {
+				title += " (" + m + ")"
+			}
+			if q.LLMPending {
+				p.Sections = append(p.Sections, render.LLMSection(i, title, s.cfg.LLMTarget(), nil, nil))
+				i++
+			} else if q.LLMTranslation != nil || q.LLMErr != nil {
+				p.Sections = append(p.Sections, render.LLMSection(i, title, s.cfg.LLMTarget(), q.LLMTranslation, q.LLMErr))
+				i++
+			}
 		}
 	}
 	sentence := IsSentence(q.Text)

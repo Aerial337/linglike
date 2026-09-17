@@ -171,6 +171,20 @@ func TranslateSection(i int, target string, res *translate.Result, err error) Se
 	return Section{ID: SectionID(i), Title: title, Kind: "translate", Body: sb.String()}
 }
 
+// LLMSection renders a local LLM translation result (or its error).
+func LLMSection(i int, title, target string, res *translate.Result, err error) Section {
+	var sb strings.Builder
+	if err != nil {
+		sb.WriteString(`<div class="err">` + html.EscapeString(err.Error()) + `</div>`)
+	} else if res != nil {
+		sb.WriteString(`<div class="tr-text">` + strings.ReplaceAll(html.EscapeString(res.Text), "\n", "<br/>") + `</div>`)
+		sb.WriteString(`<div class="tr-meta">` + html.EscapeString("→ "+translate.LanguageName(target)) + `</div>`)
+	} else {
+		sb.WriteString(`<div class="info">Asking the model…</div>`)
+	}
+	return Section{ID: SectionID(i), Title: title, Kind: "translate", Body: sb.String()}
+}
+
 // InfoSection renders a plain informational message.
 func InfoSection(i int, title, msg string) Section {
 	return Section{ID: SectionID(i), Title: title, Kind: "info", Body: `<div class="info">` + html.EscapeString(msg) + `</div>`}

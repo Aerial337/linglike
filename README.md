@@ -48,7 +48,14 @@ Lingoes 2.x dictionary.
 * **Main window** modelled on Lingoes: search box, *Results* / *Options*
   tree, index of matching headwords while you type, collapsible per-dictionary
   sections, clickable cross references between entries, search history.
-* **Text Translation** window for longer texts (Ctrl+Enter to translate).
+* **Local LLM translation** through any OpenAI-compatible server (Ollama,
+  LM Studio, llama.cpp, vLLM, LocalAI, or a hosted API): set the server URL,
+  API key, model name, target language and your own prompt template in
+  *Configuration › Translation*, press *Test connection*, and the model's
+  translation appears as its own section next to the dictionaries and
+  Google Translate (in the main window and in the popup).
+* **Text Translation** window for longer texts (Ctrl+Enter to translate),
+  with a choice of engine (Google or local LLM).
 * Runs in the **notification area** (tray), single instance, remembers
   window size and settings in `%APPDATA%\Linglike\config.json`.
 
@@ -99,6 +106,21 @@ cd cmd/linglike && go-winres make --in winres/winres.json --out rsrc
 4. **Options › Configuration...** sets the hotkey, popup size and auto-close
    time, clipboard watching, translation languages, and tray behaviour.
 
+### Local LLM setup example (Ollama)
+
+1. Install [Ollama](https://ollama.com) and run `ollama pull qwen2.5:7b`
+   (any model works; multilingual models such as Qwen, Gemma, Llama 3 or
+   Aya translate best).
+2. In Linglike open *Configuration › Translation › Local LLM*: tick *Enable*,
+   Server URL `http://localhost:11434`, Model `qwen2.5:7b`, Target language
+   e.g. `Persian`, leave the API key empty. Press *Test connection*.
+3. For LM Studio use `http://localhost:1234/v1`; for a hosted OpenAI-style
+   API use its full `/v1/chat/completions` URL and paste the API key.
+
+The prompt template may use `{text}`, `{target}` and `{source}`; the default
+asks for the translation only, without explanations. Reasoning models'
+`<think>…</think>` blocks are stripped from the answer automatically.
+
 The `lingcli` tool (built from `cmd/lingcli`) inspects dictionaries from the
 command line:
 
@@ -107,6 +129,7 @@ lingcli info  "Concise English Dictionary.ld2"
 lingcli look  "Concise English Dictionary.ld2" happy
 lingcli dump  some.mdx 20
 lingcli tr    "good morning" de
+LINGLIKE_LLM_URL=http://localhost:11434 LINGLIKE_LLM_MODEL=qwen2.5:7b lingcli llm "good morning" Persian
 ```
 
 ## Notes and limitations
@@ -140,7 +163,7 @@ internal/dict       dictionary interface, shared index, format readers:
   mdx/              MDict MDX parser (zlib/LZO, RIPEMD-128 key decryption)
   stardict/         StarDict reader with dictzip random access
   textdict/         tab separated text dictionaries
-internal/translate  Google Translate client
+internal/translate  Google Translate and OpenAI-compatible LLM clients
 internal/render     HTML pages (Lingoes-like styling)
 internal/app        configuration and lookup service
 internal/ui         main window, popup, dialogs, tray, hotkeys, hooks

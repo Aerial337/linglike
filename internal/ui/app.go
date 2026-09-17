@@ -396,23 +396,39 @@ func (a *App) runQuery(text string, compact bool, cb func(q *app.Query, done boo
 		q.Suggestions = a.svc.Suggest(text, 12)
 	}
 	wantTr := a.cfg.TranslateEnabled && (!compact || a.cfg.TranslateInPopup)
+	wantLLM := a.cfg.LLM.Enabled && (!compact || a.cfg.LLM.InPopup)
 	q.TrPending = wantTr
-	cb(q, !wantTr)
-	if !wantTr {
-		return
+	q.LLMPending = wantLLM
+	cb(q, !wantTr && !wantLLM)
+	if wantTr {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			res, err := a.svc.Translate(ctx, text)
+			a.main.mw.Synchronize(func() {
+				if seq != a.querySeq {
+					return
+				}
+				q.Translation, q.TrErr, q.TrPending = res, err, false
+				cb(q, !q.LLMPending)
+			})
+		}()
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		res, err := a.svc.Translate(ctx, text)
-		a.main.mw.Synchronize(func() {
-			if seq != a.querySeq {
-				return
-			}
-			q.Translation, q.TrErr, q.TrPending = res, err, false
-			cb(q, true)
-		})
-	}()
+	if wantLLM {
+		go func() {
+			timeout := time.Duration(a.cfg.LLM.TimeoutSec) * time.Second
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			res, err := a.svc.TranslateLLM(ctx, text)
+			a.main.mw.Synchronize(func() {
+				if seq != a.querySeq {
+					return
+				}
+				q.LLMTranslation, q.LLMErr, q.LLMPending = res, err, false
+				cb(q, !q.TrPending)
+			})
+		}()
+	}
 }
 
 // ---- dictionary discovery -------------------------------------------------
