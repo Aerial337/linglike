@@ -33,6 +33,12 @@ type App struct {
 	langNames []string // target language display names
 	langCodes []string // parallel language codes
 
+	// checkable menu items mirrored between the tray menu and the main
+	// window context menu
+	popupActs  []*walk.Action
+	hotkeyActs []*walk.Action
+	clipActs   []*walk.Action
+
 	hotkeyRegistered bool
 	clipboardHooked  bool
 	ignoreClipUntil  time.Time
@@ -107,22 +113,28 @@ func (a *App) setupTray() {
 	})
 	add("&Text Translation...", func() { a.showMain(); a.main.showTranslateDialog("") })
 	ni.ContextMenu().Actions().Add(walk.NewSeparatorAction())
+	pu := add("Enable &popup window", func() {})
+	pu.SetCheckable(true)
+	pu.Triggered().Attach(func() { a.setPopupEnabled(pu.Checked()) })
+	a.popupActs = append(a.popupActs, pu)
 	hk := add("Enable &hotkey capture", func() {})
 	hk.SetCheckable(true)
-	hk.SetChecked(a.cfg.HotkeyEnabled)
 	hk.Triggered().Attach(func() {
 		a.cfg.HotkeyEnabled = hk.Checked()
 		a.cfg.Save()
+		a.syncToggles()
 		a.applyCaptureSettings()
 	})
+	a.hotkeyActs = append(a.hotkeyActs, hk)
 	cw := add("&Watch clipboard", func() {})
 	cw.SetCheckable(true)
-	cw.SetChecked(a.cfg.ClipboardWatch)
 	cw.Triggered().Attach(func() {
 		a.cfg.ClipboardWatch = cw.Checked()
 		a.cfg.Save()
+		a.syncToggles()
 		a.applyCaptureSettings()
 	})
+	a.clipActs = append(a.clipActs, cw)
 	add("&Dictionaries...", func() { a.showMain(); a.main.showDictionariesDialog() })
 	add("&Options...", func() { a.showMain(); a.main.showSettingsDialog() })
 	ni.ContextMenu().Actions().Add(walk.NewSeparatorAction())
@@ -133,6 +145,42 @@ func (a *App) setupTray() {
 		}
 	})
 	ni.SetVisible(true)
+	a.syncToggles()
+}
+
+// syncToggles copies the configuration into every checkable menu item.
+func (a *App) syncToggles() {
+	set := func(acts []*walk.Action, on bool) {
+		for _, act := range acts {
+			if act != nil && act.Checked() != on {
+				act.SetChecked(on)
+			}
+		}
+	}
+	set(a.popupActs, a.cfg.PopupEnabled)
+	set(a.hotkeyActs, a.cfg.HotkeyEnabled)
+	set(a.clipActs, a.cfg.ClipboardWatch)
+}
+
+// setPopupEnabled turns the lookup popup on or off and saves the setting.
+func (a *App) setPopupEnabled(on bool) {
+	a.cfg.PopupEnabled = on
+	a.cfg.Save()
+	if !on && a.popup != nil {
+		a.popup.hide()
+	}
+	a.syncToggles()
+	a.applyCaptureSettings()
+	if a.main != nil {
+		if a.main.current == "" {
+			a.main.showWelcome()
+		}
+		if on {
+			a.main.setStatus("Popup enabled")
+		} else {
+			a.main.setStatus("Popup disabled – selected text is ignored until it is enabled again")
+		}
+	}
 }
 
 func (a *App) showMain() {
@@ -175,11 +223,16 @@ func (a *App) setupCapture() {
 		})
 	}
 	a.hook = &mouseHook{
-		target:     m.hwnd,
-		enabled:    func() bool { return a.cfg.CtrlRightClick },
-		popupWnd:   func() win.HWND { return a.popup.mw.Handle() },
-		ownWnds:    func() []win.HWND { return []win.HWND{a.popup.mw.Handle(), a.main.mw.Handle()} },
-		selectMode: func() string { return a.cfg.SelectionPopup },
+		target:   m.hwnd,
+		enabled:  func() bool { return a.cfg.PopupEnabled && a.cfg.CtrlRightClick },
+		popupWnd: func() win.HWND { return a.popup.mw.Handle() },
+		ownWnds:  func() []win.HWND { return []win.HWND{a.popup.mw.Handle(), a.main.mw.Handle()} },
+		selectMode: func() string {
+			if !a.cfg.PopupEnabled {
+				return "off"
+			}
+			return a.cfg.SelectionPopup
+		},
 	}
 	a.hook.leaveEnabled = a.cfg.CloseOnMouseLeave
 	a.hook.leaveDist = int32(a.cfg.MouseLeaveDistance)
@@ -203,7 +256,7 @@ func (a *App) applyCaptureSettings() {
 		unregisterHotKey(a.msg.hwnd, hotkeyID)
 		a.hotkeyRegistered = false
 	}
-	if a.cfg.HotkeyEnabled {
+	if a.cfg.HotkeyEnabled && a.cfg.PopupEnabled {
 		hk := a.cfg.Hotkey
 		var mods uint32
 		if hk.Ctrl {
@@ -230,9 +283,9 @@ func (a *App) applyCaptureSettings() {
 			}
 		}
 	}
-	if a.cfg.ClipboardWatch && !a.clipboardHooked {
+	if a.cfg.ClipboardWatch && a.cfg.PopupEnabled && !a.clipboardHooked {
 		a.clipboardHooked = win.AddClipboardFormatListener(a.msg.hwnd)
-	} else if !a.cfg.ClipboardWatch && a.clipboardHooked {
+	} else if (!a.cfg.ClipboardWatch || !a.cfg.PopupEnabled) && a.clipboardHooked {
 		removeClipboardListener(a.msg.hwnd)
 		a.clipboardHooked = false
 	}
@@ -257,7 +310,7 @@ func (a *App) teardownCapture() {
 // captureSelection copies the selection of the foreground application via
 // a simulated Ctrl+C and shows the popup with the captured text.
 func (a *App) captureSelection() {
-	if a.capturing {
+	if a.capturing || !a.cfg.PopupEnabled {
 		return
 	}
 	fg := win.GetForegroundWindow()
@@ -331,6 +384,9 @@ func (a *App) clipboardChanged() {
 }
 
 func (a *App) showPopupAtCursor(text string) {
+	if !a.cfg.PopupEnabled {
+		return
+	}
 	text = cleanCapturedText(text)
 	if text == "" {
 		return

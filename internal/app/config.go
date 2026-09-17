@@ -57,6 +57,10 @@ type Config struct {
 	LLM              LLMConfig `json:"llm"`
 
 	// Capture of selected text
+	// PopupEnabled is the master switch for the lookup popup: when it is
+	// off, no trigger (selection, hotkey, Ctrl+right-click or clipboard)
+	// opens it.
+	PopupEnabled      bool   `json:"popup_enabled"`
 	Hotkey            Hotkey `json:"hotkey"`
 	HotkeyEnabled     bool   `json:"hotkey_enabled"`
 	CtrlRightClick    bool   `json:"ctrl_right_click"`
@@ -99,6 +103,7 @@ func Default() *Config {
 			InPopup:    true,
 			TimeoutSec: 90,
 		},
+		PopupEnabled:       true,
 		Hotkey:             Hotkey{Ctrl: true, Alt: true, Key: "D"},
 		HotkeyEnabled:      true,
 		CtrlRightClick:     true,

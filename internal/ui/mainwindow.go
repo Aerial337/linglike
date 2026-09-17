@@ -53,6 +53,9 @@ type mainWindow struct {
 	status *walk.StatusBarItem
 	lang   *walk.ComboBox
 
+	tbPopup, tbHotkey, tbClip *walk.Action
+	mwPopup, mwHotkey, mwClip *walk.Action
+
 	model    *treeModel
 	results  *treeItem
 	options  *treeItem
@@ -60,6 +63,32 @@ type mainWindow struct {
 	current  string
 	indexSeq int
 	suppress bool
+}
+
+// captureMenuItems builds the right-click menu that switches the popup,
+// the hotkey and clipboard watching on and off. Each menu needs its own
+// action objects, so the targets are passed in.
+func (w *mainWindow) captureMenuItems(popup, hotkey, clip **walk.Action) []MenuItem {
+	a := w.app
+	return []MenuItem{
+		Action{AssignTo: popup, Text: "Enable &popup window", Checkable: true, OnTriggered: func() {
+			a.setPopupEnabled((*popup).Checked())
+		}},
+		Action{AssignTo: hotkey, Text: "Enable &hotkey capture", Checkable: true, OnTriggered: func() {
+			a.cfg.HotkeyEnabled = (*hotkey).Checked()
+			a.cfg.Save()
+			a.syncToggles()
+			a.applyCaptureSettings()
+		}},
+		Action{AssignTo: clip, Text: "&Watch clipboard", Checkable: true, OnTriggered: func() {
+			a.cfg.ClipboardWatch = (*clip).Checked()
+			a.cfg.Save()
+			a.syncToggles()
+			a.applyCaptureSettings()
+		}},
+		Separator{},
+		Action{Text: "&Configuration...", OnTriggered: w.showSettingsDialog},
+	}
 }
 
 func newMainWindow(a *App) (*mainWindow, error) {
@@ -80,12 +109,13 @@ func newMainWindow(a *App) (*mainWindow, error) {
 		icon = a.icon
 	}
 	err := MainWindow{
-		AssignTo: &w.mw,
-		Title:    "Linglike",
-		Icon:     icon,
-		MinSize:  Size{Width: 520, Height: 360},
-		Size:     Size{Width: a.cfg.WindowWidth, Height: a.cfg.WindowHeight},
-		Layout:   VBox{Margins: Margins{Left: 4, Top: 4, Right: 4, Bottom: 2}, Spacing: 4},
+		AssignTo:         &w.mw,
+		Title:            "Linglike",
+		Icon:             icon,
+		MinSize:          Size{Width: 520, Height: 360},
+		Size:             Size{Width: a.cfg.WindowWidth, Height: a.cfg.WindowHeight},
+		Layout:           VBox{Margins: Margins{Left: 4, Top: 4, Right: 4, Bottom: 2}, Spacing: 4},
+		ContextMenuItems: w.captureMenuItems(&w.mwPopup, &w.mwHotkey, &w.mwClip),
 		MenuItems: []MenuItem{
 			Menu{Text: "&File", Items: []MenuItem{
 				Action{Text: "&Dictionaries...", OnTriggered: w.showDictionariesDialog},
@@ -113,7 +143,8 @@ func newMainWindow(a *App) (*mainWindow, error) {
 		},
 		Children: []Widget{
 			Composite{
-				Layout: HBox{MarginsZero: true, Spacing: 4},
+				Layout:           HBox{MarginsZero: true, Spacing: 4},
+				ContextMenuItems: w.captureMenuItems(&w.tbPopup, &w.tbHotkey, &w.tbClip),
 				Children: []Widget{
 					LineEdit{
 						AssignTo:      &w.search,
@@ -184,6 +215,10 @@ func newMainWindow(a *App) (*mainWindow, error) {
 		}
 		a.cfg.Save()
 	})
+	a.popupActs = append(a.popupActs, w.tbPopup, w.mwPopup)
+	a.hotkeyActs = append(a.hotkeyActs, w.tbHotkey, w.mwHotkey)
+	a.clipActs = append(a.clipActs, w.tbClip, w.mwClip)
+	a.syncToggles()
 	w.tree.SetExpanded(w.results, true)
 	w.tree.SetExpanded(w.options, true)
 	w.lang.SetCurrentIndex(a.targetIndex())
@@ -242,6 +277,13 @@ func (w *mainWindow) showWelcome() {
 			sb.WriteString("<li>" + escape(d.Name()) + fmt.Sprintf(" <span class=\"info\">(%d entries)</span></li>", d.Count()))
 		}
 		sb.WriteString("</ul>")
+	}
+	if !w.app.cfg.PopupEnabled {
+		sb.WriteString(`<p class="info">The lookup <b>popup is switched off</b>. Right-click the toolbar or the tray icon and tick <b>Enable popup window</b> to turn it back on.</p>`)
+		p.Sections = append(p.Sections, render.Section{ID: "welcome", Title: "Welcome to Linglike", Kind: "info", Body: sb.String()})
+		w.navigate(p)
+		w.setStatus(w.dictSummary())
+		return
 	}
 	switch w.app.cfg.SelectionPopup {
 	case "always":

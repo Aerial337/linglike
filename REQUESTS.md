@@ -197,7 +197,32 @@ natively on Linux.
 
 ---
 
-## 8. Write the requests down
+## 8. Switch the popup off and on from the right-click menu and the settings
+
+> can you add enable and disable of pop up window when i rightclick in
+> toolbar and also in settings?
+
+**What this asked for**
+
+* A master switch for the lookup popup, reachable from a right-click menu
+  as well as from the Configuration dialog, so the popup can be silenced
+  without quitting the program.
+
+**What was built** (commit `659a3b9`)
+
+* A checkable **Enable popup window** item in three places: the tray icon's
+  right-click menu, the right-click menu of the main window toolbar (and of
+  the window background), and the *Capture* tab of the Configuration
+  dialog. The same menus also carry the hotkey and clipboard toggles, and a
+  shortcut to Configuration.
+* All copies of the toggles stay in sync, the state is saved immediately,
+  and while the popup is off the selection hook, the hotkey and the
+  clipboard listener are all unregistered, so nothing is captured. An open
+  popup is closed as soon as the switch is turned off.
+
+---
+
+## 9. Write the requests down
 
 > can you write what i write and what i wanted from you in this project in a
 > .md file?
@@ -218,4 +243,7 @@ single `.exe`, that:
 3. translates with **Google Translate** and with a **local LLM** server the
    user configures (URL, API key, prompt, target language);
 4. remembers its settings reliably; and
-5. displays right-to-left languages such as Persian and Arabic correctly.
+5. displays right-to-left languages such as Persian and Arabic correctly;
+   and
+6. can have its popup switched off and on from a right-click menu or the
+   settings.

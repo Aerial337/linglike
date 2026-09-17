@@ -56,6 +56,11 @@ Lingoes 2.x dictionary.
   Google Translate (in the main window and in the popup).
 * **Text Translation** window for longer texts (Ctrl+Enter to translate),
   with a choice of engine (Google or local LLM).
+* **Switch the popup off and on** without closing the program: right-click
+  the toolbar (or the window background, or the tray icon) and untick
+  *Enable popup window*; the same master switch is in
+  *Configuration › Capture*. While it is off, selections, the hotkey,
+  Ctrl + right-click and clipboard watching are all ignored.
 * Runs in the **notification area** (tray), single instance, remembers
   window size and settings in `%APPDATA%\Linglike\config.json`.
 
@@ -105,6 +110,9 @@ cd cmd/linglike && go-winres make --in winres/winres.json --out rsrc
    window.
 4. **Options › Configuration...** sets the hotkey, popup size and auto-close
    time, clipboard watching, translation languages, and tray behaviour.
+5. To stop the popup appearing for a while, right-click the toolbar or the
+   tray icon and untick **Enable popup window**. The setting is saved, so it
+   stays off until you tick it again.
 
 ### Local LLM setup example (Ollama)
 

@@ -261,7 +261,7 @@ func (w *mainWindow) showSettingsDialog() {
 	cfg := a.cfg
 	var dlg *walk.Dialog
 	var okBtn, cancelBtn *walk.PushButton
-	var hotkeyOn, ctrl, alt, shift, winKey, ctrlRight, clipWatch, restoreClip *walk.CheckBox
+	var popupOn, hotkeyOn, ctrl, alt, shift, winKey, ctrlRight, clipWatch, restoreClip *walk.CheckBox
 	var keyBox, targetBox, sourceBox *walk.ComboBox
 	var trOn, trPopup, autoClose, toTray, startHidden *walk.CheckBox
 	var popW, popH, closeSecs, maxSugg, leaveDist *walk.NumberEdit
@@ -303,6 +303,7 @@ func (w *mainWindow) showSettingsDialog() {
 	var pending app.Config
 	accept := func() {
 		pending = *cfg
+		pending.PopupEnabled = popupOn.Checked()
 		pending.HotkeyEnabled = hotkeyOn.Checked()
 		pending.Hotkey = app.Hotkey{Ctrl: ctrl.Checked(), Alt: alt.Checked(), Shift: shift.Checked(), Win: winKey.Checked(), Key: keys[max(0, keyBox.CurrentIndex())]}
 		pending.CtrlRightClick = ctrlRight.Checked()
@@ -379,6 +380,7 @@ func (w *mainWindow) showSettingsDialog() {
 								Title:  "Capture selected text",
 								Layout: Grid{Columns: 6},
 								Children: []Widget{
+									CheckBox{AssignTo: &popupOn, Text: "Enable the lookup popup (master switch for all the triggers below)", Checked: cfg.PopupEnabled, ColumnSpan: 6},
 									Label{Text: "Selecting text with the mouse opens the popup:", ColumnSpan: 3},
 									ComboBox{AssignTo: &selBox, Model: selNames, CurrentIndex: indexOf(selCodes, cfg.SelectionPopup), ColumnSpan: 3},
 									CheckBox{AssignTo: &hotkeyOn, Text: "Hotkey:", Checked: cfg.HotkeyEnabled, ColumnSpan: 1},
@@ -488,6 +490,7 @@ func (w *mainWindow) showSettingsDialog() {
 	}
 	// Set the initial state explicitly as well, in case the declarative
 	// property initialisation did not apply.
+	popupOn.SetChecked(cfg.PopupEnabled)
 	hotkeyOn.SetChecked(cfg.HotkeyEnabled)
 	ctrl.SetChecked(cfg.Hotkey.Ctrl)
 	alt.SetChecked(cfg.Hotkey.Alt)
@@ -529,6 +532,10 @@ func (w *mainWindow) showSettingsDialog() {
 		return
 	}
 	a.applyCaptureSettings()
+	a.syncToggles()
+	if !cfg.PopupEnabled {
+		a.popup.hide()
+	}
 	a.popup.mw.SetSize(walk.Size{Width: cfg.PopupWidth, Height: cfg.PopupHeight})
 	w.syncLang()
 	a.popup.syncLang()
