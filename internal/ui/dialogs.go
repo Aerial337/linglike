@@ -263,7 +263,11 @@ func (w *mainWindow) showSettingsDialog() {
 	var hotkeyOn, ctrl, alt, shift, winKey, ctrlRight, clipWatch, restoreClip *walk.CheckBox
 	var keyBox, targetBox, sourceBox *walk.ComboBox
 	var trOn, trPopup, autoClose, toTray, startHidden *walk.CheckBox
-	var popW, popH, closeSecs, maxSugg *walk.NumberEdit
+	var popW, popH, closeSecs, maxSugg, leaveDist *walk.NumberEdit
+	var selBox *walk.ComboBox
+	var leaveOn *walk.CheckBox
+	selNames := []string{"Off", "Always (any mouse selection or double-click)", "Only while holding Ctrl", "Only while holding Shift", "Only while holding Alt"}
+	selCodes := []string{"off", "always", "ctrl", "shift", "alt"}
 
 	keys := KeyNames()
 	targetNames, targetCodes := langModel(false)
@@ -290,6 +294,9 @@ func (w *mainWindow) showSettingsDialog() {
 		pending.MinimizeToTray = toTray.Checked()
 		pending.StartHidden = startHidden.Checked()
 		pending.MaxSuggestions = int(maxSugg.Value())
+		pending.SelectionPopup = selCodes[max(0, selBox.CurrentIndex())]
+		pending.CloseOnMouseLeave = leaveOn.Checked()
+		pending.MouseLeaveDistance = int(leaveDist.Value())
 		dlg.Accept()
 	}
 
@@ -305,6 +312,8 @@ func (w *mainWindow) showSettingsDialog() {
 				Title:  "Capture selected text",
 				Layout: Grid{Columns: 6},
 				Children: []Widget{
+					Label{Text: "Selecting text with the mouse opens the popup:", ColumnSpan: 3},
+					ComboBox{AssignTo: &selBox, Model: selNames, CurrentIndex: indexOf(selCodes, cfg.SelectionPopup), ColumnSpan: 3},
 					CheckBox{AssignTo: &hotkeyOn, Text: "Hotkey:", Checked: cfg.HotkeyEnabled, ColumnSpan: 1},
 					CheckBox{AssignTo: &ctrl, Text: "Ctrl", Checked: cfg.Hotkey.Ctrl},
 					CheckBox{AssignTo: &alt, Text: "Alt", Checked: cfg.Hotkey.Alt},
@@ -324,6 +333,9 @@ func (w *mainWindow) showSettingsDialog() {
 					NumberEdit{AssignTo: &popW, Value: float64(cfg.PopupWidth), MinValue: 200, MaxValue: 1600, Decimals: 0},
 					Label{Text: "Height:"},
 					NumberEdit{AssignTo: &popH, Value: float64(cfg.PopupHeight), MinValue: 120, MaxValue: 1200, Decimals: 0},
+					CheckBox{AssignTo: &leaveOn, Text: "Close when the mouse moves away more than", Checked: cfg.CloseOnMouseLeave, ColumnSpan: 1},
+					NumberEdit{AssignTo: &leaveDist, Value: float64(cfg.MouseLeaveDistance), MinValue: 10, MaxValue: 1000, Decimals: 0},
+					Label{Text: "pixels from the popup", ColumnSpan: 2},
 					CheckBox{AssignTo: &autoClose, Text: "Close automatically after", Checked: cfg.PopupAutoClose, ColumnSpan: 1},
 					NumberEdit{AssignTo: &closeSecs, Value: float64(cfg.PopupCloseSeconds), MinValue: 2, MaxValue: 120, Decimals: 0},
 					Label{Text: "seconds (when the mouse is not over it)", ColumnSpan: 2},
@@ -386,6 +398,9 @@ func (w *mainWindow) showSettingsDialog() {
 	toTray.SetChecked(cfg.MinimizeToTray)
 	startHidden.SetChecked(cfg.StartHidden)
 	maxSugg.SetValue(float64(cfg.MaxSuggestions))
+	selBox.SetCurrentIndex(indexOf(selCodes, cfg.SelectionPopup))
+	leaveOn.SetChecked(cfg.CloseOnMouseLeave)
+	leaveDist.SetValue(float64(cfg.MouseLeaveDistance))
 
 	if dlg.Run() != walk.DlgCmdOK {
 		return

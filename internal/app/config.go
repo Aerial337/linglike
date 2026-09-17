@@ -49,6 +49,14 @@ type Config struct {
 	PopupHeight       int    `json:"popup_height"`
 	PopupAutoClose    bool   `json:"popup_auto_close"`
 	PopupCloseSeconds int    `json:"popup_close_seconds"`
+	// SelectionPopup opens the popup as soon as text is selected with the
+	// mouse: "off", "always", "ctrl", "shift" or "alt" (modifier that must
+	// be held while selecting).
+	SelectionPopup string `json:"selection_popup"`
+	// CloseOnMouseLeave closes the popup when the mouse moves farther than
+	// MouseLeaveDistance pixels away from it.
+	CloseOnMouseLeave  bool `json:"close_on_mouse_leave"`
+	MouseLeaveDistance int  `json:"mouse_leave_distance"`
 
 	// Window
 	WindowWidth    int  `json:"window_width"`
@@ -64,23 +72,26 @@ type Config struct {
 // Default returns the default configuration.
 func Default() *Config {
 	return &Config{
-		TranslateEnabled:  true,
-		TargetLang:        "en",
-		SourceLang:        "auto",
-		TranslateInPopup:  true,
-		Hotkey:            Hotkey{Ctrl: true, Alt: true, Key: "D"},
-		HotkeyEnabled:     true,
-		CtrlRightClick:    true,
-		ClipboardWatch:    false,
-		RestoreClipboard:  true,
-		PopupWidth:        420,
-		PopupHeight:       320,
-		PopupAutoClose:    true,
-		PopupCloseSeconds: 12,
-		WindowWidth:       760,
-		WindowHeight:      560,
-		MinimizeToTray:    true,
-		MaxSuggestions:    30,
+		TranslateEnabled:   true,
+		TargetLang:         "en",
+		SourceLang:         "auto",
+		TranslateInPopup:   true,
+		Hotkey:             Hotkey{Ctrl: true, Alt: true, Key: "D"},
+		HotkeyEnabled:      true,
+		CtrlRightClick:     true,
+		ClipboardWatch:     false,
+		RestoreClipboard:   true,
+		PopupWidth:         420,
+		PopupHeight:        320,
+		PopupAutoClose:     true,
+		PopupCloseSeconds:  12,
+		SelectionPopup:     "always",
+		CloseOnMouseLeave:  true,
+		MouseLeaveDistance: 60,
+		WindowWidth:        760,
+		WindowHeight:       560,
+		MinimizeToTray:     true,
+		MaxSuggestions:     30,
 	}
 }
 
@@ -163,6 +174,14 @@ func Load() (*Config, error) {
 	}
 	if cfg.Hotkey.Key == "" {
 		cfg.Hotkey = Default().Hotkey
+	}
+	switch cfg.SelectionPopup {
+	case "off", "always", "ctrl", "shift", "alt":
+	default:
+		cfg.SelectionPopup = "off"
+	}
+	if cfg.MouseLeaveDistance <= 0 {
+		cfg.MouseLeaveDistance = 60
 	}
 	return cfg, nil
 }

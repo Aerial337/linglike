@@ -167,11 +167,22 @@ func (a *App) setupCapture() {
 	m.onCapture = func(x, y int32) { a.captureSelection() }
 	m.onClipboard = a.clipboardChanged
 	m.onOutside = func() { a.popup.clickedOutside() }
-	a.hook = &mouseHook{
-		target:   m.hwnd,
-		enabled:  func() bool { return a.cfg.CtrlRightClick },
-		popupWnd: func() win.HWND { return a.popup.mw.Handle() },
+	m.onLeave = func() { a.popup.mouseLeft() }
+	m.onSelect = func(x, y int32) {
+		// Give the application a moment to finalise its selection.
+		time.AfterFunc(120*time.Millisecond, func() {
+			a.main.mw.Synchronize(func() { a.captureSelection() })
+		})
 	}
+	a.hook = &mouseHook{
+		target:     m.hwnd,
+		enabled:    func() bool { return a.cfg.CtrlRightClick },
+		popupWnd:   func() win.HWND { return a.popup.mw.Handle() },
+		ownWnds:    func() []win.HWND { return []win.HWND{a.popup.mw.Handle(), a.main.mw.Handle()} },
+		selectMode: func() string { return a.cfg.SelectionPopup },
+	}
+	a.hook.leaveEnabled = a.cfg.CloseOnMouseLeave
+	a.hook.leaveDist = int32(a.cfg.MouseLeaveDistance)
 	if err := a.hook.install(); err != nil {
 		log.Println("mouse hook:", err)
 	}
@@ -183,6 +194,10 @@ func (a *App) setupCapture() {
 func (a *App) applyCaptureSettings() {
 	if a.msg == nil {
 		return
+	}
+	if a.hook != nil {
+		a.hook.leaveEnabled = a.cfg.CloseOnMouseLeave
+		a.hook.leaveDist = int32(a.cfg.MouseLeaveDistance)
 	}
 	if a.hotkeyRegistered {
 		unregisterHotKey(a.msg.hwnd, hotkeyID)
@@ -246,7 +261,7 @@ func (a *App) captureSelection() {
 		return
 	}
 	fg := win.GetForegroundWindow()
-	if fg == a.popup.mw.Handle() {
+	if fg == a.popup.mw.Handle() || fg == a.main.mw.Handle() {
 		return
 	}
 	a.capturing = true

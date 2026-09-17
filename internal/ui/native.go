@@ -27,6 +27,7 @@ var (
 	procGetClassNameW                 = user32.NewProc("GetClassNameW")
 	kernel32                          = syscall.NewLazyDLL("kernel32.dll")
 	procCreateMutexW                  = kernel32.NewProc("CreateMutexW")
+	procGetDoubleClickTime            = user32.NewProc("GetDoubleClickTime")
 )
 
 const (
@@ -40,6 +41,8 @@ const (
 
 	wmAppCapture = win.WM_APP + 1 // posted by the mouse hook: Ctrl+right-click
 	wmAppOutside = win.WM_APP + 2 // posted by the mouse hook: click outside popup
+	wmAppSelect  = win.WM_APP + 3 // posted by the mouse hook: text was selected with the mouse
+	wmAppLeave   = win.WM_APP + 4 // posted by the mouse hook: mouse moved away from the popup
 
 	hotkeyID = 1
 )
@@ -243,7 +246,101 @@ type mouseHook struct {
 	target    win.HWND // window that receives the posted notifications
 	enabled   func() bool
 	popupWnd  func() win.HWND
+	ownWnds   func() []win.HWND // windows of this application (ignored for selection)
 	swallowUp bool
+
+	// selection detection: "off", "always", "ctrl", "shift", "alt"
+	selectMode func() string
+	downPt     win.POINT
+	downTime   uint32
+	prevDown   win.POINT
+	prevTime   uint32
+	dblClick   bool
+
+	// mouse-leave detection for the popup; maintained by the popup window
+	leaveEnabled bool
+	leaveDist    int32
+	popupRect    win.RECT
+	popupShown   bool
+	showPt       win.POINT
+	wasNear      bool
+}
+
+// setPopupState is called by the popup when it is shown, moved or hidden.
+func (h *mouseHook) setPopupState(shown bool, rc win.RECT, cursor win.POINT) {
+	h.popupShown = shown
+	h.popupRect = rc
+	h.showPt = cursor
+	h.wasNear = false
+}
+
+func doubleClickTime() uint32 {
+	r, _, _ := procGetDoubleClickTime.Call()
+	if r == 0 {
+		return 500
+	}
+	return uint32(r)
+}
+
+func abs32(v int32) int32 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// distanceToRect returns the Chebyshev distance from a point to a rectangle
+// (0 when inside).
+func distanceToRect(pt win.POINT, rc win.RECT) int32 {
+	var dx, dy int32
+	if pt.X < rc.Left {
+		dx = rc.Left - pt.X
+	} else if pt.X > rc.Right {
+		dx = pt.X - rc.Right
+	}
+	if pt.Y < rc.Top {
+		dy = rc.Top - pt.Y
+	} else if pt.Y > rc.Bottom {
+		dy = pt.Y - rc.Bottom
+	}
+	if dx > dy {
+		return dx
+	}
+	return dy
+}
+
+func (h *mouseHook) isOwnWindowAt(pt win.POINT) bool {
+	top := topLevelWindowAt(pt)
+	if top == 0 {
+		return false
+	}
+	if h.ownWnds != nil {
+		for _, w := range h.ownWnds() {
+			if w == top {
+				return true
+			}
+		}
+	}
+	return windowClassAt(pt) == "ComboLBox"
+}
+
+// selectionModifierOK checks the modifier required by the selection mode.
+func (h *mouseHook) selectionModifierOK() bool {
+	mode := "off"
+	if h.selectMode != nil {
+		mode = h.selectMode()
+	}
+	switch mode {
+	case "always":
+		return true
+	case "ctrl":
+		return keyDown(win.VK_CONTROL)
+	case "shift":
+		return keyDown(win.VK_SHIFT)
+	case "alt":
+		return keyDown(win.VK_MENU)
+	}
+	return false
 }
 
 func (h *mouseHook) install() error {
@@ -279,12 +376,47 @@ func (h *mouseHook) proc(nCode uintptr, wParam uintptr, info *msllHookStruct) ui
 				h.swallowUp = false
 				return 1
 			}
-		case win.WM_LBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_NCLBUTTONDOWN:
+		case win.WM_LBUTTONDOWN:
 			h.notifyOutside(info.Pt)
+			// double-click detection (the low level hook never sees WM_LBUTTONDBLCLK)
+			h.dblClick = info.Time-h.prevTime <= doubleClickTime() &&
+				abs32(info.Pt.X-h.prevDown.X) <= 4 && abs32(info.Pt.Y-h.prevDown.Y) <= 4
+			h.prevDown, h.prevTime = info.Pt, info.Time
+			h.downPt, h.downTime = info.Pt, info.Time
+		case win.WM_LBUTTONUP:
+			dragged := abs32(info.Pt.X-h.downPt.X) >= 6 || abs32(info.Pt.Y-h.downPt.Y) >= 6
+			if (dragged || h.dblClick) && h.selectionModifierOK() &&
+				!h.isOwnWindowAt(info.Pt) && !h.isOwnWindowAt(h.downPt) {
+				win.PostMessage(h.target, wmAppSelect, uintptr(uint32(info.Pt.X)), uintptr(uint32(info.Pt.Y)))
+			}
+			h.dblClick = false
+		case win.WM_MBUTTONDOWN, win.WM_NCLBUTTONDOWN:
+			h.notifyOutside(info.Pt)
+		case win.WM_MOUSEMOVE:
+			h.mouseMoved(info.Pt)
 		}
 	}
 	r, _, _ := procCallNextHookEx.Call(h.handle, nCode, wParam, lParam)
 	return r
+}
+
+// mouseMoved closes the popup once the mouse has moved away from it
+// (Lingoes behaviour): the popup must first have been near the cursor and
+// the cursor must then be farther than leaveDist from the popup.
+func (h *mouseHook) mouseMoved(pt win.POINT) {
+	if !h.leaveEnabled || !h.popupShown {
+		return
+	}
+	d := distanceToRect(pt, h.popupRect)
+	if d <= h.leaveDist {
+		h.wasNear = true
+		return
+	}
+	moved := abs32(pt.X-h.showPt.X) >= 40 || abs32(pt.Y-h.showPt.Y) >= 40
+	if h.wasNear || moved {
+		h.popupShown = false // report once
+		win.PostMessage(h.target, wmAppLeave, 0, 0)
+	}
 }
 
 func (h *mouseHook) notifyOutside(pt win.POINT) {
@@ -314,6 +446,8 @@ type msgWindow struct {
 	onClipboard func()
 	onCapture   func(x, y int32)
 	onOutside   func()
+	onSelect    func(x, y int32)
+	onLeave     func()
 }
 
 var msgWindowClass = syscall.StringToUTF16Ptr("LinglikeMessageWindow")
@@ -355,6 +489,16 @@ func (m *msgWindow) wndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) u
 	case wmAppOutside:
 		if m.onOutside != nil {
 			m.onOutside()
+		}
+		return 0
+	case wmAppSelect:
+		if m.onSelect != nil {
+			m.onSelect(int32(uint32(wParam)), int32(uint32(lParam)))
+		}
+		return 0
+	case wmAppLeave:
+		if m.onLeave != nil {
+			m.onLeave()
 		}
 		return 0
 	}

@@ -243,11 +243,21 @@ func (w *mainWindow) showWelcome() {
 		}
 		sb.WriteString("</ul>")
 	}
-	sb.WriteString(`<p class="info">Select text in any program and press <b>` + escape(w.app.cfg.Hotkey.String()) + `</b>`)
-	if w.app.cfg.CtrlRightClick {
-		sb.WriteString(` or <b>Ctrl + right-click</b>`)
+	switch w.app.cfg.SelectionPopup {
+	case "always":
+		sb.WriteString(`<p class="info">Select text with the mouse in any program and the popup opens automatically`)
+	case "ctrl", "shift", "alt":
+		sb.WriteString(`<p class="info">Hold <b>` + strings.ToUpper(w.app.cfg.SelectionPopup[:1]) + w.app.cfg.SelectionPopup[1:] + `</b> while selecting text with the mouse and the popup opens automatically`)
+	default:
+		sb.WriteString(`<p class="info">Select text in any program`)
 	}
-	sb.WriteString(` to look it up in a popup.</p>`)
+	if w.app.cfg.HotkeyEnabled {
+		sb.WriteString(`, or press <b>` + escape(w.app.cfg.Hotkey.String()) + `</b>`)
+	}
+	if w.app.cfg.CtrlRightClick {
+		sb.WriteString(`, or <b>Ctrl + right-click</b>`)
+	}
+	sb.WriteString(`. Move the mouse away from the popup to close it.</p>`)
 	p.Sections = append(p.Sections, render.Section{ID: "welcome", Title: "Welcome to Linglike", Kind: "info", Body: sb.String()})
 	w.navigate(p)
 	w.setStatus(w.dictSummary())

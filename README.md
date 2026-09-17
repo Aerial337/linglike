@@ -34,10 +34,13 @@ Lingoes 2.x dictionary.
   * **StarDict** (`.ifo` + `.idx`/`.idx.gz` + `.dict`/`.dict.dz` + `.syn`),
     including random access into dictzip files and XDXF/HTML/plain fields.
   * **Plain text** tab separated files (`word<TAB>definition`).
-* **Look up selected text anywhere**: a global hotkey (default
-  `Ctrl+Alt+D`), `Ctrl + right-click`, or automatically whenever text is
-  copied to the clipboard ("clipboard watch"). The popup appears next to the
-  mouse pointer, stays on top, and closes when you click elsewhere.
+* **Look up selected text anywhere**: like Lingoes, simply selecting text
+  with the mouse (drag or double-click) opens the popup, optionally only
+  while holding Ctrl/Shift/Alt. Also a global hotkey (default `Ctrl+Alt+D`),
+  `Ctrl + right-click`, or automatically whenever text is copied to the
+  clipboard ("clipboard watch"). The popup appears next to the mouse
+  pointer, stays on top, and closes when you move the mouse away from it
+  or click elsewhere.
 * **Google Translate** of words and whole sentences (auto-detected source
   language, configurable target language) through the free web endpoint –
   no API key needed. Sentences are translated first, single words show
@@ -88,9 +91,11 @@ cd cmd/linglike && go-winres make --in winres/winres.json --out rsrc
    from an old Lingoes installation (`Lingoes\dict\*.ld2`).
 2. Type a word in the search box and press Enter. Click a dictionary in the
    *Results* tree to jump to it, click any linked word to look it up.
-3. In any other program, select some text and press **Ctrl+Alt+D** (or hold
-   **Ctrl** and right-click). A popup shows the definitions; click *Pin* to
-   keep it open, *Open* to continue in the main window.
+3. In any other program, select some text with the mouse (or double-click a
+   word): the popup opens next to the pointer and closes again when you move
+   the mouse away from it. **Ctrl+Alt+D** and **Ctrl + right-click** work
+   too. Click *Pin* to keep the popup open, *Open* to continue in the main
+   window.
 4. **Options › Configuration...** sets the hotkey, popup size and auto-close
    time, clipboard watching, translation languages, and tray behaviour.
 
@@ -116,6 +121,10 @@ lingcli tr    "good morning" de
 * Google Translate is used through its public web endpoint, which is not an
   official API. Google may rate-limit or change it; the app then shows the
   error in the translation section while dictionaries keep working.
+* With "selecting text opens the popup" set to *Always*, every mouse drag or
+  double-click outside Linglike is followed by a simulated Ctrl+C. Dragging
+  files in Explorer therefore also copies them to the clipboard, as in
+  Lingoes; choose *Only while holding Ctrl* (or Shift/Alt) if that bothers you.
 * Text is captured from other programs by simulating **Ctrl+C**, like
   Lingoes did. The previous clipboard content is restored afterwards (option).
   Programs running elevated (as administrator) do not accept simulated input

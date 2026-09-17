@@ -97,6 +97,7 @@ func (p *popupWindow) langChanged() {
 	}
 	p.pinned = true // keep the popup open while the user changes languages
 	p.pinBtn.SetText("Unpin")
+	p.armLeaveDetection()
 	if p.app.setTargetLang(p.app.langCodes[i]) && p.text != "" {
 		p.show(p.text)
 	}
@@ -120,6 +121,7 @@ func (p *popupWindow) togglePin() {
 		p.pinBtn.SetText("Pin")
 		p.scheduleAutoClose()
 	}
+	p.armLeaveDetection()
 }
 
 func (p *popupWindow) openInMain() {
@@ -134,6 +136,33 @@ func (p *popupWindow) hide() {
 	p.pinned = false
 	p.pinBtn.SetText("Pin")
 	p.mw.Hide()
+	if p.app.hook != nil {
+		p.app.hook.setPopupState(false, win.RECT{}, win.POINT{})
+	}
+}
+
+// mouseLeft is called by the mouse hook when the cursor moved away from
+// the popup.
+func (p *popupWindow) mouseLeft() {
+	if p.pinned || !p.mw.Visible() {
+		return
+	}
+	if win.GetForegroundWindow() == p.mw.Handle() {
+		return // the user is working inside the popup
+	}
+	p.hide()
+}
+
+// armLeaveDetection tells the mouse hook where the popup is.
+func (p *popupWindow) armLeaveDetection() {
+	if p.app.hook == nil {
+		return
+	}
+	var rc win.RECT
+	win.GetWindowRect(p.mw.Handle(), &rc)
+	var pt win.POINT
+	win.GetCursorPos(&pt)
+	p.app.hook.setPopupState(!p.pinned, rc, pt)
 }
 
 func (p *popupWindow) clickedOutside() {
@@ -194,6 +223,7 @@ func (p *popupWindow) show(text string) {
 		win.ShowWindow(hwnd, win.SW_SHOWNOACTIVATE)
 	}
 	win.SetWindowPos(hwnd, win.HWND_TOPMOST, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_NOACTIVATE)
+	p.armLeaveDetection()
 	p.app.runQuery(text, true, func(q *app.Query, done bool) {
 		if seq != p.showSeq {
 			return
