@@ -98,7 +98,7 @@ func (a *App) setupTray() {
 			a.showPopupAtCursor(t)
 		}
 	})
-	add("&Text Translation...", func() { a.main.showTranslateDialog("") })
+	add("&Text Translation...", func() { a.showMain(); a.main.showTranslateDialog("") })
 	ni.ContextMenu().Actions().Add(walk.NewSeparatorAction())
 	hk := add("Enable &hotkey capture", func() {})
 	hk.SetCheckable(true)
@@ -116,8 +116,8 @@ func (a *App) setupTray() {
 		a.cfg.Save()
 		a.applyCaptureSettings()
 	})
-	add("&Dictionaries...", func() { a.main.showDictionariesDialog() })
-	add("&Options...", func() { a.main.showSettingsDialog() })
+	add("&Dictionaries...", func() { a.showMain(); a.main.showDictionariesDialog() })
+	add("&Options...", func() { a.showMain(); a.main.showSettingsDialog() })
 	ni.ContextMenu().Actions().Add(walk.NewSeparatorAction())
 	add("E&xit", a.exit)
 	ni.MouseDown().Attach(func(x, y int, button walk.MouseButton) {
